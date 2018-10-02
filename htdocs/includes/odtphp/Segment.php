@@ -168,14 +168,39 @@ class Segment implements IteratorAggregate, Countable
     */
     public function macroReplace($text)
     {
+    	include_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
         global $langs;
 
-        $patterns=array( '/\[%M\]/','/\[%F\]/','/\[%Y\]/' );
-        $values=array( $langs->trans(date('M')), $langs->trans(date('F')), date('Y') );
+        $tmp=dol_getdate(dol_now(), true);
+        $tmp2=dol_get_prev_day($tmp['mday'], $tmp['mon'], $tmp['year']);
+        $tmp3=dol_get_prev_month($tmp['mon'], $tmp['year']);
+        $tmp4=dol_get_next_day($tmp['mday'], $tmp['mon'], $tmp['year']);
+        $tmp5=dol_get_next_month($tmp['mon'], $tmp['year']);
 
-        $text=preg_replace($patterns, $values, $text);
+        $substitutionarray=array(
+          '__DAY__' => $tmp['mday'],
+          '__CURRENTDAY__' => $tmp['mday'],
+          '__MONTH__' => $tmp['mon'],
+          '__CURRENTMONTH__' => $tmp['mon'],
+          '__MONTHTEXT__' => monthArray($langs)[$tmp['mon']],
+          '__CURRENTMONTHLONG__' => monthArray($langs)[$tmp['mon']],
+          '__YEAR__' => $tmp['year'],
+          '__CURRENTYEAR__' => $tmp['year'],
+          '__PREVIOUS_DAY__' => $tmp2['day'],
+          '__PREVIOUS_MONTH__' => $tmp3['month'],
+          '__PREVIOUS_YEAR__' => ($tmp['year'] - 1),
+          '__NEXT_DAY__' => $tmp4['day'],
+          '__NEXT_MONTH__' => $tmp5['month'],
+          '__NEXTMONTH__' => $tmp5['month'],
+          '__NEXTMONTHLONG__' => monthArray($langs)[$tmp5['month']],
+          '__NEXT_YEAR__' => ($tmp['year'] + 1),
+          '__NEXTYEAR__' => ($tmp['year'] + 1),
+        );
 
-	return $text;
+        complete_substitutions_array($substitutionarray, $langs);
+        $text=make_substitutions($text,$substitutionarray);
+
+        return $text;
     }
     /**
      * Analyse the XML code in order to find children
