@@ -71,8 +71,8 @@ $fk_default_warehouse = GETPOSTINT('fk_default_warehouse');
 $cancel = GETPOST('cancel', 'alpha');
 $confirm = GETPOST('confirm', 'alpha');
 
-if ($user->socid) {
-	$socid = $user->socid;
+if ($user->isExternalUser()) {
+	$socid = $user->isExternalUser();
 }
 
 $hookmanager->initHooks(array('ordersupplierdispatch'));
@@ -125,6 +125,15 @@ $parameters = array();
 $reshook = $hookmanager->executeHooks('doActions', $parameters, $object, $action); // Note that $action and $object may have been modified by some hooks
 if ($reshook < 0) {
 	setEventMessages($hookmanager->error, $hookmanager->errors, 'errors');
+}
+
+// Actions on an existing dispatch line: the line must be a line of the purchase order of the page
+if (in_array($action, ['checkdispatchline', 'uncheckdispatchline', 'denydispatchline', 'confirm_deleteline', 'updateline'])) {
+	$tmpdispatchline = new CommandeFournisseurDispatch($db);
+	if ($tmpdispatchline->fetch($lineid) <= 0 || (int) $tmpdispatchline->fk_element !== (int) $object->id) {
+		setEventMessages($langs->trans('ErrorRecordNotFound'), null, 'errors');
+		$action = '';
+	}
 }
 
 if ($action == 'checkdispatchline' && $permissiontocontrol) {
@@ -600,7 +609,7 @@ if ($id > 0 || !empty($ref)) {
 		} else {
 			if (!empty($object->fk_project)) {
 				$proj = new Project($db);
-				$proj->fetch($object->fk_project);
+				$proj->fetch((int) $object->fk_project);
 				$morehtmlref .= $proj->getNomUrl(1);
 				if ($proj->title) {
 					$morehtmlref .= '<span class="opacitymedium"> - '.dol_escape_htmltag($proj->title).'</span>';
@@ -1023,7 +1032,7 @@ if ($id > 0 || !empty($ref)) {
 							$btnLabel = $langs->trans("Fill").' : '.$remaintodispatch;
 							print '<button class="auto-fill-qty btn-low-emphasis --btn-icon" data-rowname="qty'.$suffix.'" data-value="'.$remaintodispatch.'" title="'.dol_escape_htmltag($btnLabel).'" aria-label="'.dol_escape_htmltag($btnLabel).'" >'.img_picto($btnLabel, 'fa-arrow-right', 'aria-hidden="true"', 0, 0, 1).'</button>';
 						}
-						print '<input id="qty'.$suffix.'" name="qty'.$suffix.'" type="number" step="any" class="width50 right qtydispatchinput" value="'.(GETPOSTISSET('qty'.$suffix) ? GETPOSTINT('qty'.$suffix) : (!getDolGlobalString('SUPPLIER_ORDER_DISPATCH_FORCE_QTY_INPUT_TO_ZERO') ? $remaintodispatch : 0)).'">';
+						print '<input id="qty'.$suffix.'" name="qty'.$suffix.'" type="number" step="any" class="width75 right qtydispatchinput" value="'.(GETPOSTISSET('qty'.$suffix) ? GETPOSTINT('qty'.$suffix) : (!getDolGlobalString('SUPPLIER_ORDER_DISPATCH_FORCE_QTY_INPUT_TO_ZERO') ? $remaintodispatch : 0)).'">';
 						print '<button class="resetline btn-low-emphasis --btn-icon" id="reset'.$suffix.'" title="'.dol_escape_htmltag($langs->trans("Reset")).'" >'.img_picto($langs->trans("Reset"), 'eraser', 'aria-hidden="true"', 0, 0, 1).'</button>';
 						print '</td>';
 
@@ -1031,6 +1040,10 @@ if ($id > 0 || !empty($ref)) {
 						if (isModEnabled('productbatch') && $objp->tobatch > 0) {
 							$type = 'batch';
 							print img_picto($langs->trans('AddStockLocationLine'), 'split', 'class="splitbutton" onClick="addDispatchLine('.$i.', \''.$type.'\')"');
+							if ($objp->tobatch == 2) {
+								// Product managed with unique serial numbers: allow to enter several serial numbers at once (one line per serial)
+								print img_picto($langs->trans('EnterMultipleSerialNumbers'), 'barcode', 'class="splitbutton marginleftonly" onClick="addDispatchLinesFromSerialList('.$i.', \''.$type.'\')"');
+							}
 						} else {
 							$type = 'dispatch';
 							print img_picto($langs->trans('AddStockLocationLine'), 'split', 'class="splitbutton" onClick="addDispatchLine('.$i.', \''.$type.'\')"');
@@ -1278,8 +1291,13 @@ if ($id > 0 || !empty($ref)) {
 				if (isModEnabled("reception")) {
 					print '<td class="nowraponall">';
 					if (!empty($objp->fk_reception)) {
-						$reception = new Reception($db);
-						$reception->fetch($objp->fk_reception);
+						if (empty($conf->cache['reception'][$objp->fk_reception])) {
+							$reception = new Reception($db);
+							$reception->fetch($objp->fk_reception);
+							$conf->cache['reception'][$objp->fk_reception] = $reception;
+						} else {
+							$reception = $conf->cache['reception'][$objp->fk_reception];
+						}
 						print $reception->getNomUrl(1);
 					}
 
@@ -1317,9 +1335,15 @@ if ($id > 0 || !empty($ref)) {
 				if (isModEnabled('productbatch')) {
 					if ($objp->batch) {
 						include_once DOL_DOCUMENT_ROOT.'/product/stock/class/productlot.class.php';
-						$lot = new Productlot($db);
-						$lot->fetch(0, $objp->pid, $objp->batch);
-						print '<td class="dispatch_batch_number">'.$lot->getNomUrl(1).'</td>';
+						$lotcachekey = $objp->pid.'_'.$objp->batch;
+						if (empty($conf->cache['productlot'][$lotcachekey])) {
+							$lot = new Productlot($db);
+							$lot->fetch(0, $objp->pid, $objp->batch);
+							$conf->cache['productlot'][$lotcachekey] = $lot;
+						} else {
+							$lot = $conf->cache['productlot'][$lotcachekey];
+						}
+						print '<td class="dispatch_batch_number" data-col="batch"  data-batch="' . dolPrintHTMLForAttribute($objp->batch) . '" data-productid="' . $objp->fk_product . '" >'.$lot->getNomUrl(1).'</td>';
 						if (!getDolGlobalString('PRODUCT_DISABLE_SELLBY')) {
 							print '<td class="dispatch_dlc">'.dol_print_date($lot->sellby, 'day').'</td>';
 						}
@@ -1327,7 +1351,7 @@ if ($id > 0 || !empty($ref)) {
 							print '<td class="dispatch_dluo">'.dol_print_date($lot->eatby, 'day').'</td>';
 						}
 					} else {
-						print '<td class="dispatch_batch_number"></td>';
+						print '<td class="dispatch_batch_number" data-col="batch" data-batch="" data-productid="' . $objp->fk_product . '" ></td>';
 						if (!getDolGlobalString('PRODUCT_DISABLE_SELLBY')) {
 							print '<td class="dispatch_dlc"></td>';
 						}
@@ -1392,16 +1416,16 @@ if ($id > 0 || !empty($ref)) {
 							$disabled = 1;
 						}
 						if (empty($objp->status)) {
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=checkdispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Approve").'</a>';
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=denydispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Deny").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=checkdispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Approve").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=denydispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Deny").'</a>';
 						}
 						if ($objp->status == 1) {
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=uncheckdispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Reinit").'</a>';
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=denydispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Deny").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=uncheckdispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Reinit").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=denydispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Deny").'</a>';
 						}
 						if ($objp->status == 2) {
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=uncheckdispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Reinit").'</a>';
-							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=checkdispatchline&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Approve").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=uncheckdispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Reinit").'</a>';
+							print '<a class="button'.($disabled ? ' buttonRefused' : '').'" href="'.$_SERVER["PHP_SELF"]."?id=".$id."&action=checkdispatchline&token=".newToken()."&lineid=".$objp->dispatchlineid.'">'.$langs->trans("Approve").'</a>';
 						}
 					}
 					print '</td>';

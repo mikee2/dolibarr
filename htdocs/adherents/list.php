@@ -4,11 +4,11 @@
  * Copyright (C) 2004-2022	Laurent Destailleur			<eldy@users.sourceforge.net>
  * Copyright (C) 2013-2015	Raphaël Doursenaud			<rdoursenaud@gpcsolutions.fr>
  * Copyright (C) 2014-2016	Juanjo Menent				<jmenent@2byte.es>
- * Copyright (C) 2018-2024	Alexandre Spangaro			<aspangaro@open-dsi.fr>
- * Copyright (C) 2021-2025  Frédéric France				<frederic.france@free.fr>
+ * Copyright (C) 2018-2026	Alexandre Spangaro			<alexandre@inovea-conseil.com>
+ * Copyright (C) 2021-2026  Frédéric France				<frederic.france@free.fr>
  * Copyright (C) 2024-2026	MDW							<mdeweerd@users.noreply.github.com>
  * Copyright (C) 2024		Benjamin Falière			<benjamin.faliere@altairis.fr>
- * Copyright (C) 2024		Alexandre Spangaro			<alexandre@inovea-conseil.com>
+ * Copyright (C) 2026		Mélina Joum					<melina.joum@altairis.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,6 +45,7 @@ require_once DOL_DOCUMENT_ROOT.'/adherents/class/adherent.class.php';
 require_once DOL_DOCUMENT_ROOT.'/adherents/class/adherent_type.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formother.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/phone.lib.php';
 
 // Load translation files required by the page
 $langs->loadLangs(array("members", "companies", "categories"));
@@ -81,7 +82,14 @@ $search_phone = GETPOST("search_phone", 'alpha');
 $search_phone_perso = GETPOST("search_phone_perso", 'alpha');
 $search_phone_mobile = GETPOST("search_phone_mobile", 'alpha');
 $search_type = GETPOST("search_type", 'alpha');
+$search_amount = GETPOST("search_amount", 'alpha');
+$search_minimumamount = GETPOST("search_minimumamount", 'alpha');
 $search_email = GETPOST("search_email", 'alpha');
+if (isModEnabled('mailing')) {
+	$search_no_email = GETPOSTISSET("search_no_email") ? GETPOSTINT("search_no_email") : -1;
+} else {
+	$search_no_email = -1;
+}
 $search_categ = GETPOST("search_categ", 'intcomma');
 $search_morphy = GETPOST("search_morphy", 'alpha');
 $search_import_key = trim(GETPOST("search_import_key", 'alpha'));
@@ -164,7 +172,7 @@ $fieldstosearchall = array(
 );
 
 $arrayfields = array(
-	'd.rowid' => array('label' => 'ID', 'checked' => 1, 'enabled' => getDolGlobalInt('MAIN_SHOW_TECHNICAL_ID'), 'position' => 1),
+	'd.rowid' => array('label' => 'TechnicalID', 'checked' => -1, 'enabled' => 1, 'position' => 1),
 	'd.ref' => array('label' => "Ref", 'checked' => 1),
 	'd.civility' => array('label' => "Civility", 'checked' => 0),
 	'd.gender' => array('label' => "Gender", 'checked' => 0),
@@ -172,6 +180,8 @@ $arrayfields = array(
 	'd.login' => array('label' => "Login", 'checked' => 1),
 	'd.morphy' => array('label' => "MemberNature", 'checked' => 1),
 	't.libelle' => array('label' => "MemberType", 'checked' => 1, 'position' => 55),
+	't.amount' => array('label' => "RecommendedAmount", 'checked' => 1, 'position' => 55),
+	't.minimumamount' => array('label' => "MinimumAmountShort", 'checked' => 1, 'position' => 55),
 	'd.address' => array('label' => "Address", 'checked' => 0),
 	'd.zip' => array('label' => "Zip", 'checked' => 0),
 	'd.town' => array('label' => "Town", 'checked' => 0),
@@ -179,6 +189,7 @@ $arrayfields = array(
 	'd.phone_perso' => array('label' => "PhonePerso", 'checked' => 0),
 	'd.phone_mobile' => array('label' => "PhoneMobile", 'checked' => 0),
 	'd.email' => array('label' => "Email", 'checked' => 1),
+	'unsubscribed' => array('label' => 'No_Email', 'checked' => '0', 'enabled' => (string) (int) isModEnabled('mailing'), 'position' => 126),
 	'state.nom' => array('label' => "State", 'checked' => 0, 'position' => 90),
 	'country.code_iso' => array('label' => "Country", 'checked' => 0, 'position' => 95),
 	/*'d.note_public'=>array('label'=>"NotePublic", 'checked'=>0),
@@ -213,6 +224,10 @@ foreach ($object->fields as $key => $val) {
 
 // Extra fields
 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_array_fields.tpl.php';
+
+// Add hook to complete $arrayfields
+$parameters = array('arrayfields' => &$arrayfields);
+$reshook = $hookmanager->executeHooks('completeArrayFields', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
 
 $object->fields = dol_sort_array($object->fields, 'position');
 //$arrayfields['anotherfield'] = array('type'=>'integer', 'label'=>'AnotherField', 'checked'=>1, 'enabled'=>1, 'position'=>90, 'csslist'=>'right');
@@ -265,7 +280,10 @@ if (empty($reshook)) {
 		$search_login = "";
 		$search_company = "";
 		$search_type = "";
+		$search_amount = "";
+		$search_minimumamount = "";
 		$search_email = "";
+		$search_no_email = -1;
 		$search_address = "";
 		$search_zip = "";
 		$search_town = "";
@@ -289,7 +307,7 @@ if (empty($reshook)) {
 	}
 
 	// Close
-	if ($massaction == 'close' && $user->hasRight('adherent', 'creer')) {
+	if ($massaction == 'close' && $permissiontoadd) {
 		$tmpmember = new Adherent($db);
 		$nbclose = 0;
 
@@ -299,12 +317,11 @@ if (empty($reshook)) {
 			$tmpmember->fetch($idtoclose);
 			$result = $tmpmember->resiliate($user);
 
-			if ($result < 0 && !count($tmpmember->errors)) {
+			if ($result < 0) {
+				$error++;
 				setEventMessages($tmpmember->error, $tmpmember->errors, 'errors');
-			} else {
-				if ($result > 0) {
-					$nbclose++;
-				}
+			} elseif ($result > 0) {
+				$nbclose++;
 			}
 		}
 
@@ -333,12 +350,11 @@ if (empty($reshook)) {
 
 				$result = $nuser->create_from_member($tmpuser, $tmpmember->login);
 
-				if ($result < 0 && !count($tmpmember->errors)) {
-					setEventMessages($tmpmember->error, $tmpmember->errors, 'errors');
-				} else {
-					if ($result > 0) {
-						$nbcreated++;
-					}
+				if ($result < 0) {
+					$error++;
+					setEventMessages($nuser->error, $nuser->errors, 'errors');
+				} elseif ($result > 0) {
+					$nbcreated++;
 				}
 			}
 		}
@@ -353,17 +369,41 @@ if (empty($reshook)) {
 	}
 
 	// Create external user
-	if ($action == 'createsubscription_confirm' && $confirm == "yes" && $user->hasRight('adherent', 'creer')) {
+	if ($action == 'createsubscription_confirm' && $confirm == "yes" && $user->hasRight('adherent', 'cotisation', 'creer')) {	// Same permission as the subscription form of a member
 		$tmpmember = new Adherent($db);
 		$adht = new AdherentType($db);
+		$label = GETPOST("label");
 		$nbcreated = 0;
 		$now = dol_now();
 		$amount = price2num(GETPOST('amount', 'alpha'));
+		// Honour MEMBER_SUBSCRIPTION_SUGGEST_END_OF_MONTH and
+		// MEMBER_SUBSCRIPTION_SUGGEST_END_OF_YEAR the same way as the
+		// single subscription form (adherents/subscription.php), otherwise
+		// the mass action falls back to a one-year duration in
+		// Adherent::subscription() and ignores the global setting.
+		$datesubend = 0;
+		if (getDolGlobalInt('MEMBER_SUBSCRIPTION_SUGGEST_END_OF_MONTH')) {
+			$datesubend = dol_get_last_day((int) dol_print_date($now, "%Y"), (int) dol_print_date($now, "%m"));
+		} elseif (getDolGlobalInt('MEMBER_SUBSCRIPTION_SUGGEST_END_OF_YEAR')) {
+			$datesubend = dol_get_last_day((int) dol_print_date($now, "%Y"));
+		}
 		$db->begin();
 		foreach ($toselect as $id) {
 			$res = $tmpmember->fetch($id);
 			if ($res > 0) {
-				$result = $tmpmember->subscription($now, (float) $amount);
+				// Mirror the single subscription form (adherents/subscription.php): if no
+				// global EOM/EOY override was set, compute the end date from the member's
+				// AdherentType duration_value/duration_unit so a 6-month type does not
+				// silently fall back to the 1-year default in Adherent::subscription()
+				$datesubendthismember = $datesubend;
+				if (!$datesubendthismember && $tmpmember->typeid > 0) {
+					if ($adht->fetch($tmpmember->typeid) > 0) {
+						$delay = !empty($adht->duration_value) ? $adht->duration_value : 1;
+						$delayunit = !empty($adht->duration_unit) ? $adht->duration_unit : 'y';
+						$datesubendthismember = dol_time_plus_duree(dol_time_plus_duree($now, $delay, $delayunit), -1, 'd');
+					}
+				}
+				$result = $tmpmember->subscription($now, (float) $amount, 0, '', '', '', '', '', $datesubendthismember);
 				if ($result < 0) {
 					$error++;
 				} else {
@@ -418,8 +458,12 @@ $sql .= " d.fk_adherent_type as type_id, d.morphy, d.statut as status, d.datec a
 $sql .= " d.note_private, d.note_public, d.import_key,";
 $sql .= " s.nom,";
 $sql .= " ".$db->ifsql("d.societe IS NULL", "s.nom", "d.societe")." as companyname,";
-$sql .= " t.libelle as type, t.subscription,";
+$sql .= " t.libelle as type, t.subscription, t.amount, t.minimumamount,";
 $sql .= " state.code_departement as state_code, state.nom as state_name";
+
+if (isModEnabled('mailing')) {
+	$sql .= ", (SELECT count(*) FROM ".MAIN_DB_PREFIX."mailing_unsubscribe WHERE email = d.email) as unsubscribed";
+}
 
 // Add fields from extrafields
 if (!empty($extrafields->attributes[$object->table_element]['label'])) {
@@ -487,6 +531,12 @@ if ($search_all) {
 if ($search_type > 0) {
 	$sql .= " AND t.rowid=".((int) $search_type);
 }
+if ($search_amount != '') {
+	$sql .= natural_search('t.amount', $search_amount, 1);
+}
+if ($search_minimumamount != '') {
+	$sql .= natural_search('t.minimumamount', $search_minimumamount, 1);
+}
 if ($search_filter == 'withoutsubscription') {
 	$sql .= " AND (datefin IS NULL)";
 }
@@ -535,6 +585,12 @@ if ($search_company) {
 if ($search_email) {
 	$sql .= natural_search("d.email", $search_email);
 }
+if ($search_no_email != -1 && $search_no_email > 0) {
+	$sql .= " AND (SELECT count(*) FROM ".MAIN_DB_PREFIX."mailing_unsubscribe WHERE email = d.email) > 0";
+}
+if ($search_no_email != -1 && $search_no_email == 0) {
+	$sql .= " AND (SELECT count(*) FROM ".MAIN_DB_PREFIX."mailing_unsubscribe WHERE email = d.email) = 0 AND d.email IS NOT NULL AND d.email <> ''";
+}
 if ($search_address) {
 	$sql .= natural_search("d.address", $search_address);
 }
@@ -548,13 +604,13 @@ if ($search_state) {
 	$sql .= natural_search("state.nom", $search_state);
 }
 if ($search_phone) {
-	$sql .= natural_search("d.phone", $search_phone);
+	$sql .= dol_natural_search_phone($db, "d.phone", $search_phone);
 }
 if ($search_phone_perso) {
-	$sql .= natural_search("d.phone_perso", $search_phone_perso);
+	$sql .= dol_natural_search_phone($db, "d.phone_perso", $search_phone_perso);
 }
 if ($search_phone_mobile) {
-	$sql .= natural_search("d.phone_mobile", $search_phone_mobile);
+	$sql .= dol_natural_search_phone($db, "d.phone_mobile", $search_phone_mobile);
 }
 if ($search_country) {
 	$sql .= " AND d.country IN (".$db->sanitize($search_country).')';
@@ -684,6 +740,9 @@ if ($search_login) {
 if ($search_email) {
 	$query += ['search_email' => $search_email];
 }
+if ($search_no_email != -1) {
+	$query += ['search_no_email' => $search_no_email];
+}
 if ($search_categ > 0 || $search_categ == -2) {
 	$query += ['search_categ' => $search_categ];
 }
@@ -725,6 +784,12 @@ if ($search_import_key != '') {
 }
 if ($search_type > 0) {
 	$query += ['search_type' => $search_type];
+}
+if ($search_amount != '') {
+	$query += ['search_amount' => $search_amount];
+}
+if ($search_minimumamount != '') {
+	$query += ['search_minimumamount' => $search_minimumamount];
 }
 if ($search_datec_start) {
 	$query += [
@@ -768,7 +833,7 @@ if (isModEnabled('category') && $user->hasRight('adherent', 'creer')) {
 if ($user->hasRight('adherent', 'creer') && $user->hasRight('user', 'user', 'creer')) {
 	$arrayofmassactions['createexternaluser'] = img_picto('', 'user', 'class="pictofixedwidth"').$langs->trans("CreateExternalUser");
 }
-if ($user->hasRight('adherent', 'creer')) {
+if ($user->hasRight('adherent', 'cotisation', 'creer')) {
 	$arrayofmassactions['createsubscription'] = img_picto('', 'payment', 'class="pictofixedwidth"').$langs->trans("CreateSubscription");
 }
 if (GETPOSTINT('nomassaction') || in_array($massaction, array('presend', 'predelete', 'preaffecttag'))) {
@@ -791,11 +856,11 @@ print '<input type="hidden" name="page_y" value="">';
 print '<input type="hidden" name="mode" value="'.$mode.'">';
 
 $newcardbutton = '';
-$queryforbutton = $query;
-$queryforbutton['mode'] = 'common';
-$newcardbutton .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-bars imgforviewmode', dolBuildUrl($_SERVER["PHP_SELF"], $queryforbutton), '', ((empty($mode) || $mode == 'common') ? 2 : 1), array('morecss' => 'reposition'));
-$queryforbutton['mode'] = 'kanban';
-$newcardbutton .= dolGetButtonTitle($langs->trans('ViewKanban'), '', 'fa fa-th-list imgforviewmode', dolBuildUrl($_SERVER["PHP_SELF"], $queryforbutton), '', ($mode == 'kanban' ? 2 : 1), array('morecss' => 'reposition'));
+$argsforbutton = $query;
+$argsforbutton['mode'] = 'common';
+$newcardbutton .= dolGetButtonTitle($langs->trans('ViewList'), '', 'fa fa-bars imgforviewmode', dolBuildUrl($_SERVER["PHP_SELF"], $argsforbutton), '', ((empty($mode) || $mode == 'common') ? 2 : 1), array('morecss' => 'reposition'));
+$argsforbutton['mode'] = 'kanban';
+$newcardbutton .= dolGetButtonTitle($langs->trans('ViewKanban'), '', 'fa fa-th-list imgforviewmode', dolBuildUrl($_SERVER["PHP_SELF"], $argsforbutton), '', ($mode == 'kanban' ? 2 : 1), array('morecss' => 'reposition'));
 $newcardbutton .= dolGetButtonTitle($langs->trans('Statistics'), '', 'fa fa-chart-bar imgforviewmode', dol_buildpath('/adherents/stats/geo.php', 1).'?mode=memberbycountry&objecttype=adherent@adherent'.preg_replace('/(&|\?)*(mode|groupby)=[^&]+/', '', $param), '', ($mode == 'statistics' ? 2 : 1), array('morecss' => 'reposition'));
 $newcardbutton .= dolGetButtonTitleSeparator();
 $newcardbutton .= dolGetButtonTitle($langs->trans('NewMember'), '', 'fa fa-plus-circle', dolBuildUrl(DOL_URL_ROOT.'/adherents/card.php', ['action' => 'create']), '', $user->hasRight('adherent', 'creer'));
@@ -830,6 +895,7 @@ if ($massaction == 'createsubscription') {
 	$formquestion = array(
 		array('label' => $langs->trans("DateSubscription"), 'type' => 'other', 'value' => $date),
 		array('label' => $langs->trans("Amount"), 'type' => 'text', 'value' => price($amount, 0, '', 0), 'name' => 'amount'),
+		array('label' => $langs->trans("Label"), 'type' => 'text', 'value' => '', 'name' => 'label'),
 		array('type' => 'separator'),
 		array('label' => $langs->trans("MoreActions"), 'type' => 'other', 'value' => $langs->trans("None").' '.img_warning($langs->trans("WarningNoComplementaryActionDone"))),
 	);
@@ -892,8 +958,8 @@ if ($conf->main_checkbox_left_column) {
 
 // Line numbering
 if (!empty($arrayfields['d.rowid']['checked'])) {
-	print '<td class="liste_titre">';
-	print '<input class="flat" size="6" type="text" name="search_id" value="'.dol_escape_htmltag($search_id).'">';
+	print '<td class="liste_titre center">';
+	print '<input class="width50" type="text" name="search_id" value="'.dol_escape_htmltag($search_id).'">';
 	print '</td>';
 }
 
@@ -959,6 +1025,20 @@ if (!empty($arrayfields['t.libelle']['checked'])) {
 	print '</td>';
 }
 
+// Amount
+if (!empty($arrayfields['t.amount']['checked'])) {
+	print '<td class="liste_titre">';
+	print '<input class="flat" type="text" size="4" name="search_amount" value="'.dol_escape_htmltag($search_amount).'">';
+	print '</td>';
+}
+
+// Minimum amount
+if (!empty($arrayfields['t.minimumamount']['checked'])) {
+	print '<td class="liste_titre">';
+	print '<input class="flat" type="text" size="4" name="search_minimumamount" value="'.dol_escape_htmltag($search_minimumamount).'">';
+	print '</td>';
+}
+
 // Address - Street
 if (!empty($arrayfields['d.address']['checked'])) {
 	print '<td class="liste_titre left">';
@@ -1015,12 +1095,10 @@ if (!empty($arrayfields['d.email']['checked'])) {
 	print '<input class="flat maxwidth75imp" type="text" name="search_email" value="'.dol_escape_htmltag($search_email).'"></td>';
 }
 
-// End of subscription date
-if (!empty($arrayfields['d.datefin']['checked'])) {
+// No email (unsubscribe)
+if (!empty($arrayfields['unsubscribed']['checked'])) {
 	print '<td class="liste_titre center">';
-	//$selectarray = array('-1'=>'', 'withoutsubscription'=>$langs->trans("WithoutSubscription"), 'uptodate'=>$langs->trans("UpToDate"), 'outofdate'=>$langs->trans("OutOfDate"));
-	$selectarray = array('-1' => '', 'waitingsubscription' => $langs->trans("WaitingSubscription"), 'uptodate' => $langs->trans("UpToDate"), 'outofdate' => $langs->trans("OutOfDate"));
-	print $form->selectarray('search_filter', $selectarray, $search_filter);
+	print $form->selectarray('search_no_email', array('-1' => '', '0' => $langs->trans('No'), '1' => $langs->trans('Yes')), $search_no_email);
 	print '</td>';
 }
 
@@ -1066,6 +1144,15 @@ if (!empty($arrayfields['d.tms']['checked'])) {
 if (!empty($arrayfields['d.import_key']['checked'])) {
 	print '<td class="liste_titre center">';
 	print '<input class="flat searchstring maxwidth50" type="text" name="search_import_key" value="'.dol_escape_htmltag($search_import_key).'">';
+	print '</td>';
+}
+
+// End of subscription date
+if (!empty($arrayfields['d.datefin']['checked'])) {
+	print '<td class="liste_titre center">';
+	//$selectarray = array('-1'=>'', 'withoutsubscription'=>$langs->trans("WithoutSubscription"), 'uptodate'=>$langs->trans("UpToDate"), 'outofdate'=>$langs->trans("OutOfDate"));
+	$selectarray = array('-1' => '', 'waitingsubscription' => $langs->trans("WaitingSubscription"), 'uptodate' => $langs->trans("UpToDate"), 'outofdate' => $langs->trans("OutOfDate"));
+	print $form->selectarray('search_filter', $selectarray, $search_filter);
 	print '</td>';
 }
 
@@ -1137,11 +1224,19 @@ if (!empty($arrayfields['d.login']['checked'])) {
 	$totalarray['nbfield']++;
 }
 if (!empty($arrayfields['d.morphy']['checked'])) {
-	print_liste_field_titre($arrayfields['d.morphy']['label'], $_SERVER["PHP_SELF"], 'd.morphy', '', $param, '', $sortfield, $sortorder);
+	print_liste_field_titre($arrayfields['d.morphy']['label'], $_SERVER["PHP_SELF"], 'd.morphy', '', $param, '', $sortfield, $sortorder, 'center ');
 	$totalarray['nbfield']++;
 }
 if (!empty($arrayfields['t.libelle']['checked'])) {
 	print_liste_field_titre($arrayfields['t.libelle']['label'], $_SERVER["PHP_SELF"], 't.libelle', '', $param, '', $sortfield, $sortorder);
+	$totalarray['nbfield']++;
+}
+if (!empty($arrayfields['t.amount']['checked'])) {
+	print_liste_field_titre($arrayfields['t.amount']['label'], $_SERVER["PHP_SELF"], 't.amount', '', $param, '', $sortfield, $sortorder);
+	$totalarray['nbfield']++;
+}
+if (!empty($arrayfields['t.minimumamount']['checked'])) {
+	print_liste_field_titre($arrayfields['t.minimumamount']['label'], $_SERVER["PHP_SELF"], 't.minimumamount', '', $param, '', $sortfield, $sortorder);
 	$totalarray['nbfield']++;
 }
 if (!empty($arrayfields['d.address']['checked'])) {
@@ -1180,8 +1275,8 @@ if (!empty($arrayfields['d.email']['checked'])) {
 	print_liste_field_titre($arrayfields['d.email']['label'], $_SERVER["PHP_SELF"], 'd.email', '', $param, '', $sortfield, $sortorder);
 	$totalarray['nbfield']++;
 }
-if (!empty($arrayfields['d.datefin']['checked'])) {
-	print_liste_field_titre($arrayfields['d.datefin']['label'], $_SERVER["PHP_SELF"], 'd.datefin,t.subscription', '', $param, '', $sortfield, $sortorder, 'center ');
+if (!empty($arrayfields['unsubscribed']['checked'])) {
+	print_liste_field_titre($arrayfields['unsubscribed']['label'], $_SERVER["PHP_SELF"], 'unsubscribed', '', $param, '', $sortfield, $sortorder, 'center ');
 	$totalarray['nbfield']++;
 }
 // Extra fields
@@ -1206,6 +1301,10 @@ if (!empty($arrayfields['d.tms']['checked'])) {
 }
 if (!empty($arrayfields['d.import_key']['checked'])) {
 	print_liste_field_titre($arrayfields['d.import_key']['label'], $_SERVER["PHP_SELF"], "d.import_key", "", $param, '', $sortfield, $sortorder, 'center ');
+	$totalarray['nbfield']++;
+}
+if (!empty($arrayfields['d.datefin']['checked'])) {
+	print_liste_field_titre($arrayfields['d.datefin']['label'], $_SERVER["PHP_SELF"], 'd.datefin,t.subscription', '', $param, '', $sortfield, $sortorder, 'center ');
 	$totalarray['nbfield']++;
 }
 if (!empty($arrayfields['d.statut']['checked'])) {
@@ -1393,6 +1492,24 @@ while ($i < $imaxinloop) {
 				$totalarray['nbfield']++;
 			}
 		}
+		// Amount
+		if (!empty($arrayfields['t.amount']['checked'])) {
+			print '<td class="nowraponall tdoverflowmax100">';
+			print price($obj->amount);
+			print '</td>';
+			if (!$i) {
+				$totalarray['nbfield']++;
+			}
+		}
+		// Minimum amount
+		if (!empty($arrayfields['t.minimumamount']['checked'])) {
+			print '<td class="nowraponall tdoverflowmax100">';
+			print price($obj->minimumamount);
+			print '</td>';
+			if (!$i) {
+				$totalarray['nbfield']++;
+			}
+		}
 		// Address
 		if (!empty($arrayfields['d.address']['checked'])) {
 			print '<td class="nocellnopadd tdoverflowmax200" title="'.dol_escape_htmltag($obj->address).'">';
@@ -1468,36 +1585,17 @@ while ($i < $imaxinloop) {
 		}
 		// EMail
 		if (!empty($arrayfields['d.email']['checked'])) {
-			print '<td class="tdoverflowmax150" title="'.dol_escape_htmltag($obj->email).'">';
-			print dol_print_email($obj->email, 0, 0, 1, 64, 1, 1);
+			print '<td class="tdoverflowmax150" title="'.dolPrintHTMLForAttribute((string) $obj->email).'">';
+			$showinvalidemail = getDolGlobalInt('MAIN_SHOW_INVALID_EMAIL_IN_LIST', 1); // in list, we check only syntax of emails
+			print dol_print_email((string) $obj->email, 0, 0, 1, 64, $showinvalidemail, 1);
 			print "</td>\n";
 			if (!$i) {
 				$totalarray['nbfield']++;
 			}
 		}
-		// End of subscription date
-		$datefin = $db->jdate($obj->datefin);
-		if (!empty($arrayfields['d.datefin']['checked'])) {
-			$s = '';
-			if ($datefin) {
-				$s .= dol_print_date($datefin, 'day');
-				if ($memberstatic->hasDelay()) {
-					$textlate = ' ('.$langs->trans("DateReference").' > '.$langs->trans("DateToday").' '.(ceil(getWarningDelay('member', 'subscription') / 60 / 60 / 24) >= 0 ? '+' : '').ceil(getWarningDelay('member', 'subscription') / 60 / 60 / 24).' '.$langs->trans("days").')';
-					$s .= " ".img_warning($langs->trans("SubscriptionLate").$textlate);
-				}
-			} else {
-				if (!empty($obj->subscription)) {
-					$s .= '<span class="opacitymedium">'.$langs->trans("SubscriptionNotReceived").'</span>';
-					if ($obj->status > 0) {
-						$s .= " ".img_warning();
-					}
-				} else {
-					$s .= '<span class="opacitymedium">'.$langs->trans("SubscriptionNotNeeded").'</span>';
-				}
-			}
-			print '<td class="nowraponall center tdoverflowmax150" title="'.dolPrintHTMLForAttribute(dol_string_nohtmltag($s)).'">';
-			print $s;
-			print '</td>';
+		// Unsubscribe from mass mailing
+		if (!empty($arrayfields['unsubscribed']['checked'])) {
+			print '<td class="center">'.yn(($obj->unsubscribed > 0) ? 1 : 0)."</td>\n";
 			if (!$i) {
 				$totalarray['nbfield']++;
 			}
@@ -1540,6 +1638,33 @@ while ($i < $imaxinloop) {
 			print '<td class="tdoverflowmax100 center" title="'.dolPrintHTMLForAttribute($obj->import_key).'">';
 			print dolPrintHTML($obj->import_key);
 			print "</td>\n";
+			if (!$i) {
+				$totalarray['nbfield']++;
+			}
+		}
+		// End of subscription date
+		$datefin = $db->jdate($obj->datefin);
+		if (!empty($arrayfields['d.datefin']['checked'])) {
+			$s = '';
+			if ($datefin) {
+				$s .= dol_print_date($datefin, 'day');
+				if ($memberstatic->hasDelay()) {
+					$textlate = ' ('.$langs->trans("DateReference").' > '.$langs->trans("DateToday").' '.(ceil(getWarningDelay('member', 'subscription') / 60 / 60 / 24) >= 0 ? '+' : '').ceil(getWarningDelay('member', 'subscription') / 60 / 60 / 24).' '.$langs->trans("days").')';
+					$s .= " ".img_warning($langs->trans("SubscriptionLate").$textlate);
+				}
+			} else {
+				if (!empty($obj->subscription)) {
+					$s .= '<span class="opacitymedium">'.$langs->trans("SubscriptionNotReceived").'</span>';
+					if ($obj->status > 0) {
+						$s .= " ".img_warning();
+					}
+				} else {
+					$s .= '<span class="opacitymedium">'.$langs->trans("SubscriptionNotNeeded").'</span>';
+				}
+			}
+			print '<td class="nowraponall center tdoverflowmax150" title="'.dolPrintHTMLForAttribute(dol_string_nohtmltag($s)).'">';
+			print $s;
+			print '</td>';
 			if (!$i) {
 				$totalarray['nbfield']++;
 			}

@@ -137,7 +137,7 @@ if ($object->id > 0) {
 			} else {
 				if (!empty($object->fk_project)) {
 					$proj = new Project($db);
-					$proj->fetch($object->fk_project);
+					$proj->fetch((int) $object->fk_project);
 					$morehtmlref .= $proj->getNomUrl(1);
 					if ($proj->title) {
 						$morehtmlref .= '<span class="opacitymedium"> - '.dol_escape_htmltag($proj->title).'</span>';
@@ -153,8 +153,13 @@ if ($object->id > 0) {
 		print '<div class="underbanner clearboth"></div>';
 
 		$cssclass = "titlefield";
-		include DOL_DOCUMENT_ROOT.'/core/tpl/notes.tpl.php';
-
+		$dirtpls = array_merge($conf->modules_parts['tpl'], array('/core/tpl'));
+		foreach ($dirtpls as $reldir) {
+			$res = @include dol_buildpath($reldir.'/notes.tpl.php');
+			if ($res) {
+				break;
+			}
+		}
 		print '</div>';
 
 		print dol_get_fiche_end();

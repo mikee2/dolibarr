@@ -53,6 +53,7 @@ require_once DOL_DOCUMENT_ROOT . '/core/lib/date.lib.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/html.formother.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/html.formprojet.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/html.formintervention.class.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 
 // Load translation files required by the page
 $langsLoad = array('projects', 'bills', 'orders', 'companies');
@@ -137,6 +138,8 @@ $projectstatic = new Project($db);
 // fetch optionals attributes and labels
 $extrafields->fetch_name_optionals_label($projectstatic->table_element);
 $extrafields->fetch_name_optionals_label($object->table_element);
+
+$search_array_options = $extrafields->getOptionalsFromPost($object->table_element, '', 'search_');
 
 // Load task
 if ($id > 0 || $ref) {
@@ -312,7 +315,10 @@ if (($action == 'updateline' || $action == 'updatesplitline') && !$cancel && $us
 				$object->timespent_date = $timespent_date;
 				$object->timespent_withhour = 0;
 			}
-			$object->timespent_fk_user = GETPOSTINT("userid_line");
+			// If column "by" is hidden, no userid_line is posted; keep the existing fk_user instead of resetting it to 0.
+			if (GETPOSTISSET("userid_line")) {
+				$object->timespent_fk_user = GETPOSTINT("userid_line");
+			}
 			$object->timespent_fk_product = GETPOSTINT("fk_product");
 			$object->timespent_invoiceid = GETPOSTINT("invoiceid");
 			$object->timespent_invoicelineid = GETPOSTINT("invoicelineid");
@@ -347,7 +353,10 @@ if (($action == 'updateline' || $action == 'updatesplitline') && !$cancel && $us
 				$object->timespent_withhour = 0;
 			}
 
-			$object->timespent_fk_user = GETPOSTINT("userid_line");
+			// If column "by" is hidden, no userid_line is posted; keep the existing fk_user instead of resetting it to 0.
+			if (GETPOSTISSET("userid_line")) {
+				$object->timespent_fk_user = GETPOSTINT("userid_line");
+			}
 			$object->timespent_fk_product = GETPOSTINT("fk_product");
 			$object->timespent_invoiceid = GETPOSTINT("invoiceid");
 			$object->timespent_invoicelineid = GETPOSTINT("invoicelineid");
@@ -410,6 +419,38 @@ if (GETPOSTINT('projectid') > 0) {
 		$projectstatic->fetch_thirdparty();
 	}
 	$res = $projectstatic->fetch_optionals();
+
+	// Quick edit for project extrafields (pencil shown on the project summary of this page)
+	if ($action == 'update_extras' && $projectstatic->id > 0) {	// Test on permission already done
+		$permissiontoeditextra = $user->hasRight('projet', 'creer');
+		if (GETPOST('attribute', 'aZ09') && isset($extrafields->attributes[$projectstatic->table_element]['perms'][GETPOST('attribute', 'aZ09')])) {
+			$permissiontoeditextra = dol_eval((string) $extrafields->attributes[$projectstatic->table_element]['perms'][GETPOST('attribute', 'aZ09')]);
+		}
+
+		if ($permissiontoeditextra) {
+			$projectstatic->oldcopy = dol_clone($projectstatic, 2);
+
+			$attribute_name = GETPOST('attribute', 'aZ09');
+
+			// Fill array 'array_options' with data from update form
+			$ret = $extrafields->setOptionalsFromPost(null, $projectstatic, $attribute_name);
+			if ($ret < 0) {
+				$error++;
+			}
+
+			if (!$error) {
+				$result = $projectstatic->updateExtraField($attribute_name, 'PROJECT_MODIFY');
+				if ($result < 0) {
+					setEventMessages($projectstatic->error, $projectstatic->errors, 'errors');
+					$error++;
+				}
+			}
+		}
+
+		if ($error) {
+			$action = 'edit_extras';
+		}
+	}
 } elseif (GETPOST('project_ref', 'alpha')) {
 	$projectstatic->fetch(0, GETPOST('project_ref', 'alpha'));
 	$projectidforalltimes = $projectstatic->id;
@@ -560,6 +601,8 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 									$error++;
 									$langs->load("errors");
 									setEventMessages(null, $tmpproduct->errors, 'errors');
+									// Skip this entry: without it the loop reaches addline() and divides by the duration (#40805).
+									continue;
 								}
 
 								$dataforprice = $tmpproduct->getSellPrice($mysoc, $projectstatic->thirdparty, 0);
@@ -580,8 +623,11 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 							$idprodline = $fk_product;
 						}
 
-						// Add lines
-						$lineid = $tmpinvoice->addline($langs->trans("TimeSpentForInvoice").' - '.$username . ' : ' . $qtyhourtext, $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject);
+						// Add lines. Pass type=1 (service) explicitly so the invoice line is tagged
+						// as a service even when no product is bound to the time entry. Otherwise
+						// the default $type=0 leaks through and the PDF labels the operation as
+						// "Delivery of goods" instead of "Provision of services" (issue #34571).
+						$lineid = $tmpinvoice->addline($langs->trans("TimeSpentForInvoice").' - '.$username . ' : ' . $qtyhourtext, $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject, '', '', 0, 0, 0, 'HT', 0, Product::TYPE_SERVICE);
 						if ($lineid < 0) {
 							$error++;
 							setEventMessages(null, $tmpinvoice->errors, 'errors');
@@ -629,7 +675,9 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 					$arrayoftasks[$object->timespent_id]['fk_product'] = $object->timespent_fk_product;
 				}
 
+				$pu_ht_saved = $pu_ht;	// Save the base unit price (price of the selected product/service if any, 0 otherwise)
 				foreach ($arrayoftasks as $timespent_id => $value) {
+					$pu_ht = $pu_ht_saved;	// Reset for each line, so a line does not inherit the unit price computed for the previous one
 					$userid = $value['user'];
 					//$pu_ht = $value['timespent'] * $fuser->thm;
 
@@ -638,7 +686,9 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 
 					// If no unit price known
 					if (empty($pu_ht)) {
-						$pu_ht = price2num($value['totalvaluetodivideby3600'] / 3600, 'MU');
+						if ($value['timespent']) {
+							$pu_ht = price2num(($value['totalvaluetodivideby3600'] / $value['timespent']), 'MU');
+						}
 					}
 
 					// Add lines
@@ -661,6 +711,8 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 								$error++;
 								$langs->load("errors");
 								setEventMessages(null, $tmpproduct->errors, 'errors');
+								// Skip this entry: without it the loop reaches addline() and divides by the duration (#40805).
+								continue;
 							}
 
 							$dataforprice = $tmpproduct->getSellPrice($mysoc, $projectstatic->thirdparty, 0);
@@ -680,7 +732,11 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 						}
 						$idprodline = $value['fk_product'];
 					}
-					$lineid = $tmpinvoice->addline($value['note'], $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject);
+					// Pass type=1 (service) explicitly so the invoice line is tagged as a service
+					// even when no product is bound to the time entry. Otherwise the default
+					// $type=0 leaks through and the PDF labels the operation as
+					// "Delivery of goods" instead of "Provision of services" (issue #34571).
+					$lineid = $tmpinvoice->addline($value['note'], $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject, '', '', 0, 0, 0, 'HT', 0, Product::TYPE_SERVICE);
 					if ($lineid < 0) {
 						$error++;
 						setEventMessages(null, $tmpinvoice->errors, 'errors');
@@ -703,8 +759,14 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 					// Get userid, timepent
 					$object->fetchTimeSpent($value);        // Call method to get list of timespent for a timespent line id (We use the utility method found into Task object)
 					// $object->id is now the task id
+					if (!isset($arrayoftasks[$object->id][(int) $object->timespent_fk_product])) {
+						$arrayoftasks[$object->id][(int) $object->timespent_fk_product] = array('timespent' => 0, 'totalvaluetodivideby3600' => 0, 'ids' => array());
+					}
 					$arrayoftasks[$object->id][(int) $object->timespent_fk_product]['timespent'] += $object->timespent_duration;
 					$arrayoftasks[$object->id][(int) $object->timespent_fk_product]['totalvaluetodivideby3600'] += ($object->timespent_duration * $object->timespent_thm);
+					// Keep the time spent lines that feed this invoice line, so the back link below
+					// points each of them at its own line and not at the last one created.
+					$arrayoftasks[$object->id][(int) $object->timespent_fk_product]['ids'][] = (int) $value;
 				}
 
 				foreach ($arrayoftasks as $task_id => $data) {  // @phan-suppress-current-line PhanEmptyForeach
@@ -735,6 +797,8 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 									$error++;
 									$langs->load("errors");
 									setEventMessages(null, $tmpproduct->errors, 'errors');
+									// Skip this entry: without it the loop reaches addline() and divides by the duration (#40805).
+									continue;
 								}
 
 								$dataforprice = $tmpproduct->getSellPrice($mysoc, $projectstatic->thirdparty, 0);
@@ -788,7 +852,7 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 						if (!$error) {
 							// Update lineid into line of timespent
 							$sql = 'UPDATE ' . MAIN_DB_PREFIX . 'element_time SET invoice_line_id = ' . ((int) $lineid) . ', invoice_id = ' . ((int) $tmpinvoice->id);
-							$sql .= ' WHERE rowid IN (' . $db->sanitize(implode(',', $toselect)) . ')';
+							$sql .= ' WHERE rowid IN (' . $db->sanitize(implode(',', $timespent_data['ids'])) . ')';
 							$result = $db->query($sql);
 							if (!$result) {
 								$error++;
@@ -841,7 +905,7 @@ if ($action == 'confirm_generateinter' && $user->hasRight('fichinter', 'creer'))
 		$tmpinter->socid = $projectstatic->thirdparty->id;
 		$tmpinter->date = dol_mktime(GETPOSTINT('rehour'), GETPOSTINT('remin'), GETPOSTINT('resec'), GETPOSTINT('remonth'), GETPOSTINT('reday'), GETPOSTINT('reyear'));
 		$tmpinter->fk_project = $projectstatic->id;
-		$tmpinter->description = $projectstatic->title . (!empty($projectstatic->description) ? '-' . $projectstatic->label : '');
+		$tmpinter->description = $projectstatic->title . (!empty($projectstatic->description) ? '-' . $projectstatic->description : '');
 
 		if ($interToUse) {
 			$tmpinter->fetch($interToUse);
@@ -947,7 +1011,7 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			$projectstatic->fetch_thirdparty();
 		}
 		$res = $projectstatic->fetch_optionals();
-	} elseif ($object->fetch($id, $ref) >= 0) {
+	} elseif ($object->fetch($id, $ref) > 0) {
 		if (getDolGlobalString('PROJECT_ALLOW_COMMENT_ON_TASK') && empty($object->comments)) {
 			$object->fetchComments();
 		}
@@ -1071,7 +1135,13 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			$cols = 2;
 			$savobject = $object;
 			$object = $projectstatic;
+			// On this page, the 'id' GET parameter is the task id, not the project id, so force the
+			// edit link/form of the project extrafields to use 'projectid' instead, and keep 'withproject'
+			// so the project summary (this whole block) stays visible after the edit link is followed.
+			$forcefieldid = 'projectid';
+			$moreparam = '&withproject=1';
 			include DOL_DOCUMENT_ROOT . '/core/tpl/extrafields_view.tpl.php';
+			unset($forcefieldid, $moreparam);
 			$object = $savobject;
 
 			print '</table>';
@@ -1404,10 +1474,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		if ($search_timespent_endmin) {
 			$param .= '&search_timespent_duration_endmin=' . urlencode((string) ($search_timespent_endmin));
 		}
-		/*
-		 // Add $param from extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_param.tpl.php';
-		 */
+		// Add $param from extra fields
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_param.tpl.php';
+		if ($id) {
+			$param .= '&id=' . urlencode((string) ($id));
+		}
 		if ($projectid) {
 			$param .= '&projectid=' . urlencode((string) ($projectid));
 		}
@@ -1441,6 +1512,9 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		print '<input type="hidden" name="sortfield" value="' . $sortfield . '">';
 		print '<input type="hidden" name="sortorder" value="' . $sortorder . '">';
 
+		// Carry the task id through the filter submit so that the timespent list
+		// stays scoped to the current task instead of falling back to the global view.
+		print '<input type="hidden" name="id" value="' . ((int) $id) . '">';
 		print '<input type="hidden" name="projectid" value="' . $projectidforalltimes . '">';
 		print '<input type="hidden" name="withproject" value="' . $withproject . '">';
 		print '<input type="hidden" name="tab" value="' . $tab . '">';
@@ -1608,13 +1682,16 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		}
 
 		$sql = "SELECT t.rowid, t.fk_element, t.element_date, t.element_datehour, t.element_date_withhour, t.element_duration, t.fk_user, t.note, t.thm,";
-		$sql .= " t.fk_product, t.import_key, t.datec, t.tms,";
-		$sql .= " pt.rowid as taskid, pt.ref, pt.label, pt.fk_projet,";
+		$sql .= " t.fk_product, t.invoice_line_id, t.import_key, t.datec, t.tms,";
+		$sql .= " pt.rowid as taskid, pt.ref, pt.label, pt.fk_projet, pt.billable,";
 		$sql .= " u.lastname, u.firstname, u.login, u.photo, u.gender, u.statut as user_status,";
 		$sql .= " il.fk_facture as invoice_id, inv.fk_statut,";
-		$sql .= " p.fk_soc,s.name_alias,";
-		$sql .= " t.invoice_line_id,";
-		$sql .= " pt.billable";
+		$sql .= " p.fk_soc, s.name_alias";
+		if (!empty($extrafields->attributes['projet_task']['label'])) {
+			foreach ($extrafields->attributes['projet_task']['label'] as $key => $val) {
+				$sql .= ($extrafields->attributes['projet_task']['type'][$key] != 'separate' ? ",efpt.".$key." as options_".$key : '');
+			}
+		}
 		// Add fields from hooks
 		$parameters = array();
 		$reshook = $hookmanager->executeHooks('printFieldListSelect', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -1628,6 +1705,7 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."facture as inv ON inv.rowid = il.fk_facture";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."product as prod ON prod.rowid = t.fk_product";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."projet_task as pt ON pt.rowid = t.fk_element";
+		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."projet_task_extrafields as efpt ON pt.rowid = efpt.fk_object";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."projet as p ON p.rowid = pt.fk_projet";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."user as u ON t.fk_user = u.rowid";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON s.rowid = p.fk_soc";
@@ -1710,17 +1788,22 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			if ($search_timespent_starthour || $search_timespent_startmin) {
 				$timespent_duration_start = $search_timespent_starthour * 60 * 60; // We store duration in seconds
 				$timespent_duration_start += ($search_timespent_startmin ? $search_timespent_startmin : 0) * 60; // We store duration in seconds
-				$sql .= " AND t.element_duration >= " . $timespent_duration_start;
+				$sql .= " AND t.element_duration >= " . ((int) $timespent_duration_start);
 			}
 
 			if ($search_timespent_endhour || $search_timespent_endmin) {
 				$timespent_duration_end = $search_timespent_endhour * 60 * 60; // We store duration in seconds
 				$timespent_duration_end += ($search_timespent_endmin ? $search_timespent_endmin : 0) * 60; // We store duration in seconds
-				$sql .= " AND t.element_duration <= " . $timespent_duration_end;
+				$sql .= " AND t.element_duration <= " . ((int) $timespent_duration_end);
 			}
 		}
 
 		$sql .= dolSqlDateFilter('t.element_datehour', $search_day, $search_month, $search_year);
+
+		// Add where from extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'efpt.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_sql.tpl.php';
 
 		// Add where from hooks
 		$parameters = array();
@@ -2046,10 +2129,10 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print '<td class="liste_titre center">' . $form->selectyesno('search_valuebilled', $search_valuebilled, 1, false, 1) . '</td>';
 		}
 
-		/*
-		 // Extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_input.tpl.php';
-		 */
+		// Extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'ef.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_input.tpl.php';
 		// Fields from hook
 		$parameters = array('arrayfields' => $arrayfields);
 		$reshook = $hookmanager->executeHooks('printFieldListOption', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -2136,10 +2219,10 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print_liste_field_titre($arrayfields['valuebilled']['label'], $_SERVER['PHP_SELF'], 'il.total_ht', '', $param, '', $sortfield, $sortorder, 'center ', $langs->trans("SelectLinesOfTimeSpentToInvoice"));
 			$totalarray['nbfield']++;
 		}
-		/*
-		 // Extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_title.tpl.php';
-		 */
+		// Extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'ef.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_title.tpl.php';
 		// Hook fields
 		$parameters = array('arrayfields' => $arrayfields, 'param' => $param, 'sortfield' => $sortfield, 'sortorder' => $sortorder);
 		$reshook = $hookmanager->executeHooks('printFieldListTitle', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -2560,10 +2643,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				}
 			}
 
-			/*
-			 // Extra fields
-			 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-			 */
+			// Extra fields
+			$obj = $task_time;
+			$extrafieldsobjectkey = 'projet_task';
+			$extrafieldsobjectprefix = 'ef.';
+			include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 			// Fields from hook
 			$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'i' => $i, 'totalarray' => &$totalarray);
@@ -2777,10 +2861,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '</td>';
 				}
 
-				/*
-				 // Extra fields
-				 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-				 */
+				// Extra fields
+				$obj = $task_time;
+				$extrafieldsobjectkey = 'projet_task';
+				$extrafieldsobjectprefix = 'ef.';
+				include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 				// Fields from hook
 				$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'mode' => 'split1');
@@ -2952,10 +3037,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '</td>';
 				}
 
-				/*
-				 // Extra fields
-				 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-				 */
+				// Extra fields
+				$obj = $task_time;
+				$extrafieldsobjectkey = 'projet_task';
+				$extrafieldsobjectprefix = 'ef.';
+				include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 				// Fields from hook
 				$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'mode' => 'split2');

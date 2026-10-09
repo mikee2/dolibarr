@@ -32,6 +32,7 @@
  *
  * @var string $websitekey
  */
+'@phan-var-force string $websitekey';
 
 // Load website class
 include_once DOL_DOCUMENT_ROOT.'/website/class/website.class.php';
@@ -251,7 +252,11 @@ if ($_SERVER['PHP_SELF'] != DOL_URL_ROOT.'/website/index.php') {	// If we browsi
 		$sql = "SELECT wp.rowid, wp.lang, wp.pageurl, wp.fk_page";
 		$sql .= " FROM ".MAIN_DB_PREFIX."website_page as wp";
 		$sql .= " WHERE wp.fk_website = ".((int) $website->id);
-		$sql .= " AND (wp.fk_page = ".((int) $pageid)." OR wp.rowid  = ".((int) $pageid);
+		if (!empty($pageid)) {
+			$sql .= " AND (wp.fk_page = ".((int) $pageid)." OR wp.rowid  = ".((int) $pageid);
+		} else {
+			$sql .= " AND (0";
+		}
 		if (is_object($websitepage) && $websitepage->fk_page > 0) {
 			$sql .= " OR wp.fk_page = ".((int) $websitepage->fk_page)." OR wp.rowid = ".((int) $websitepage->fk_page);
 		}
@@ -265,7 +270,7 @@ if ($_SERVER['PHP_SELF'] != DOL_URL_ROOT.'/website/index.php') {	// If we browsi
 				$newpageid = $obj->rowid;
 				if ($newpageid != $pageid) { 		// To avoid to make a redirect on same page (infinite loop)
 					if (defined('USEDOLIBARRSERVER')) {
-						header("Location: ".DOL_URL_ROOT.'/public/website/index.php?website='.$websitekey.'&pageid='.$newpageid.'&l='.GETPOST('l', 'aZ09'));
+						header("Location: ".DOL_URL_ROOT.'/public/website/index.php?website='.urlencode((string) $websitekey).'&pageid='.$newpageid.'&l='.GETPOST('l', 'aZ09'));
 						exit;
 					} else {
 						$newpageref = $obj->pageurl;

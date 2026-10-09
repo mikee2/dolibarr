@@ -54,10 +54,13 @@ if ($user->socid) {
 	$socid = $user->socid;
 }
 $hookmanager->initHooks(array('fichinternote'));
-$result = restrictedArea($user, 'ficheinter', $id, 'fichinter');
 
 $object = new Fichinter($db);
 $object->fetch($id, $ref);
+if ($object->id > 0) {
+	$id = $object->id;	// The page may be called with the ref only: the security check must be done on the object found
+}
+$result = restrictedArea($user, 'ficheinter', $id, 'fichinter');
 
 $permissionnote = $user->hasRight('ficheinter', 'creer'); // Used by the include of actions_setnotes.inc.php
 
@@ -129,8 +132,13 @@ if ($id > 0 || !empty($ref)) {
 	print '<div class="underbanner clearboth"></div>';
 
 	$cssclass = "titlefield";
-	include DOL_DOCUMENT_ROOT.'/core/tpl/notes.tpl.php';
-
+	$dirtpls = array_merge($conf->modules_parts['tpl'], array('/core/tpl'));
+	foreach ($dirtpls as $reldir) {
+		$res = @include dol_buildpath($reldir.'/notes.tpl.php');
+		if ($res) {
+			break;
+		}
+	}
 	print '</div>';
 
 	print dol_get_fiche_end();

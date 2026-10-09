@@ -75,7 +75,7 @@ class AdherentType extends CommonObject
 	 *  	'date', 'datetime', 'timestamp', 'duration',
 	 *  	'boolean', 'checkbox', 'radio', 'array',
 	 *  	'mail', 'phone', 'url', 'password', 'ip'
-	 *		Note: Filter must be a Dolibarr Universal Filter syntax string. Example: "(t.ref:like:'SO-%') or (t.date_creation:<:'20160101') or (t.status:!=:0) or (t.nature:is:NULL)"
+	 *		Note: Filter must be a Dolibarr Universal Filter syntax string. Example: "(t.ref:like:'SO-%') or (t.date_creation:>:'20160101') or (t.status:!=:0) or (t.nature:is:NULL)"
 	 *  'label' the translation key.
 	 *  'picto' is code of a picto to show before value in forms
 	 *  'enabled' is a condition when the field must be managed (Example: 1 or 'getDolGlobalInt("MY_SETUP_PARAM")' or 'isModEnabled("multicurrency")' ...)
@@ -235,6 +235,7 @@ class AdherentType extends CommonObject
 	public function __construct(DoliDB $db)
 	{
 		global $langs;
+
 		$this->db = $db;
 
 		$this->ismultientitymanaged = 1;
@@ -575,11 +576,23 @@ class AdherentType extends CommonObject
 	{
 		$error = 0;
 
+		$this->db->begin();
+
+		// The type is deleted first: the query fails if the type is still used by a member (foreign key)
 		$sql = "DELETE FROM ".MAIN_DB_PREFIX."adherent_type";
 		$sql .= " WHERE rowid = ".((int) $this->id);
 
 		$resql = $this->db->query($sql);
 		if ($resql) {
+			// Delete the translations and the extrafields of the type (these tables have no foreign key)
+			$sql = "DELETE FROM ".MAIN_DB_PREFIX."adherent_type_lang";
+			$sql .= " WHERE fk_type = ".((int) $this->id);
+			if (!$this->db->query($sql) || $this->deleteExtraFields() < 0) {
+				$this->error = $this->db->lasterror();
+				$this->db->rollback();
+				return -1;
+			}
+
 			// Call trigger
 			$result = $this->call_trigger('MEMBER_TYPE_DELETE', $user);
 			if ($result < 0) {
@@ -1096,6 +1109,16 @@ class AdherentType extends CommonObject
 			$result .= ($maxlen ? dol_trunc($this->label, $maxlen) : $this->label);
 		}
 		$result .= $linkend;
+
+		global $action, $hookmanager;
+		$hookmanager->initHooks(array($this->element . 'dao'));
+		$parameters = array('id' => $this->id, 'getnomurl' => &$result);
+		$reshook = $hookmanager->executeHooks('getNomUrl', $parameters, $this, $action); // Note that $action and $object may have been modified by some hooks
+		if ($reshook > 0) {
+			$result = $hookmanager->resPrint;
+		} else {
+			$result .= $hookmanager->resPrint;
+		}
 
 		return $result;
 	}

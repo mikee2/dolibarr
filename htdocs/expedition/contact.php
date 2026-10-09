@@ -3,7 +3,7 @@
  * Copyright (C) 2005-2011 Laurent Destailleur  <eldy@users.sourceforge.net>
  * Copyright (C) 2005-2012 Regis Houssin        <regis.houssin@inodbox.com>
  * Copyright (C) 2023      Christian Foellmann  <christian@foellmann.de>
- * Copyright (C) 2024-2025  Frédéric France         <frederic.france@free.fr>
+ * Copyright (C) 2024-2026  Frédéric France         <frederic.france@free.fr>
  * Copyright (C) 2025-2026	MDW						<mdeweerd@users.noreply.github.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,6 +28,13 @@
 
 // Load Dolibarr environment
 require '../main.inc.php';
+/**
+ * @var Conf $conf
+ * @var DoliDB $db
+ * @var HookManager $hookmanager
+ * @var Translate $langs
+ * @var User $user
+ */
 require_once DOL_DOCUMENT_ROOT.'/expedition/class/expedition.class.php';
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/sendings.lib.php';
@@ -38,13 +45,6 @@ if (isModEnabled('project')) {
 	require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';
 }
 
-/**
- * @var Conf $conf
- * @var DoliDB $db
- * @var HookManager $hookmanager
- * @var Translate $langs
- * @var User $user
- */
 
 // Load translation files required by the page
 $langs->loadLangs(array('orders', 'sendings', 'companies'));
@@ -181,7 +181,7 @@ if ($id > 0 || !empty($ref)) {
 		} else {
 			if (!empty($objectsrc) && !empty($objectsrc->fk_project)) {
 				$proj = new Project($db);
-				$proj->fetch($objectsrc->fk_project);
+				$proj->fetch((int) $objectsrc->fk_project);
 				$morehtmlref .= $proj->getNomUrl(1);
 				if ($proj->title) {
 					$morehtmlref .= '<span class="opacitymedium"> - '.dol_escape_htmltag($proj->title).'</span>';

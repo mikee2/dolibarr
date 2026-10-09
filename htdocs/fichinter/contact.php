@@ -2,7 +2,7 @@
 /* Copyright (C) 2005-2012  Regis Houssin               <regis.houssin@inodbox.com>
  * Copyright (C) 2007-2009  Laurent Destailleur         <eldy@users.sourceforge.net>
  * Copyright (C) 2012       Juanjo Menent               <jmenent@2byte.es>
- * Copyright (C) 2024-2025  Frédéric France             <frederic.france@free.fr>
+ * Copyright (C) 2024-2026  Frédéric France             <frederic.france@free.fr>
  * Copyright (C) 2025       MDW                         <mdeweerd@users.noreply.github.com>
  * Copyright (C) 2026       Alexandre Spangaro			<alexandre@inovea-conseil.com>
  *
@@ -31,6 +31,7 @@ require '../main.inc.php';
 /**
  * @var Conf $conf
  * @var DoliDB $db
+ * @var ExtraFields $extrafields
  * @var HookManager $hookmanager
  * @var Translate $langs
  * @var User $user
@@ -50,14 +51,17 @@ $ref = GETPOST('ref', 'alpha');
 $action = GETPOST('action', 'aZ09');
 
 // Security check
-if ($user->socid) {
-	$socid = $user->socid;
+if ($user->isExternalUser()) {
+	$socid = $user->isExternalUser();
 }
-$result = restrictedArea($user, 'ficheinter', $id, 'fichinter');
 
 $object = new Fichinter($db);
-$result = $object->fetch($id, $ref);
-if (!$result) {
+$resultfetch = $object->fetch($id, $ref);
+if ($object->id > 0) {
+	$id = $object->id;	// The page may be called with the ref only: the security check must be done on the object found
+}
+$result = restrictedArea($user, 'ficheinter', $id, 'fichinter');
+if (!$resultfetch) {
 	print 'Record not found';
 	exit;
 }

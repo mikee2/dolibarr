@@ -8,7 +8,7 @@
  * Copyright (C) 2018       Ferran Marcet           <fmarcet@2byte.es>
  * Copyright (C) 2021-2023  Anthony Berton          <anthony.berton@bb2a.fr>
  * Copyright (C) 2024-2026	MDW							<mdeweerd@users.noreply.github.com>
- * Copyright (C) 2024		Frédéric France				<frederic.france@free.fr>
+ * Copyright (C) 2024-2026  Frédéric France				<frederic.france@free.fr>
  * Copyright (C) 2025		Marc de Lima Lucio			<marc-dll@user.noreply.github.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -360,7 +360,7 @@ $colortext = implode(',', colorStringToArray($colortext));
 $colortextlink = implode(',', colorStringToArray($colortextlink));
 
 // @phan-suppress-next-line PhanRedefinedClassReference
-$nbtopmenuentries = $menumanager->showmenu('topnb');
+$nbtopmenuentries = is_object($menumanager) ? $menumanager->showmenu('topnb') : 0;
 $nbtopmenuentriesreal = $nbtopmenuentries;
 if ($conf->browser->layout == 'phone') {
 	$nbtopmenuentries = max($nbtopmenuentries, 10);
@@ -461,6 +461,7 @@ $leftmenuwidth = 254;
 	--textbutaction : #<?php print $textbutaction; ?>;
 	--colorblack: #000;
 	--colorwhite: #fff;
+	--colorwhitelight: #eee;
 	--heightrow: <?php print $heightrow; ?>;
 }
 
@@ -517,6 +518,7 @@ if (getDolGlobalString('THEME_DARKMODEENABLED')) {
 				--tablevalidbgcolor: rgb(80, 64, 33);
 				--colorblack: #fff;
 				--colorwhite: #000;
+				--colorwhitelight: #333;
 	      }
 
 		body, button {
@@ -580,7 +582,7 @@ select.vmenusearchselectcombo {
 	background-color: unset;
 }
 
-textarea:focus {
+textarea:focus:not(.ia-input, .cke_source) {
 	border: 1px solid #aaa !important;
 }
 input:focus:not(.input-icon-user, .input-icon-password, .input-icon-security):not(.noborderfocus):not(.inputsearch_dropdownselectedfields):not(.button):not(.buttonwebsite):not(.buttonreset):not(.select2-search__field):not(#top-bookmark-search-input):not(.search_component_input):not(.input-nobottom),
@@ -639,7 +641,7 @@ input, input.flat, textarea, textarea.flat, form.flat select, select, select.fla
 }
 
 /* this cases always use an input with only a background border */
-span.massactionselect, input.inputsearch_dropdownselectedfields {
+span.massactionselect, input.inputsearch_dropdownselectedfields, div.liinputsearch input {
 	border-radius: 0 !important;
 	border-top: 0 !important;
 	border-left: 0 !important;
@@ -734,7 +736,7 @@ textarea {
 	border-right:solid 1px var(--inputbordercolor);
 	border-bottom:solid 1px var(--inputbordercolor);
 
-	background-color: #FFF;
+	/* background-color: #FFF; */
 	padding:8px;
 	margin-left:1px;
 	margin-bottom:1px;
@@ -961,6 +963,10 @@ input.pageplusone {
 .opacitytransp {
 	opacity: 0;
 }
+.spantitle {
+	opacity: 0.6;
+	font-size: 0.95em;
+}
 .noopacity {
 	opacity: unset !important;
 }
@@ -989,6 +995,9 @@ input.pageplusone {
 }
 .anchorundermenu {
 	scroll-margin-top: 80px;
+}
+.banner-object-label {
+	opacity: 0.8;
 }
 
 select:invalid, select.--error {
@@ -1239,12 +1248,21 @@ textarea.centpercent {
 .small, small {
 	font-size: 85%;
 }
+.smallimp {
+	font-size: 85% !important;
+}
 .select2-results__option .smallincombo {
 	font-size: 95%;
 	font-weight: bold;
 }
+.tdlineheightsmall {
+	padding-top: 0 !important;
+	padding-bottom: 0 !important;
+	vertical-align: middle;
+}
 .lineheightsmall {
 	line-height: 1.2em;
+	vertical-align: middle;
 }
 .lineheightmedium {
 	line-height: 1.5em;
@@ -1507,6 +1525,14 @@ td.wordbreak img, td.wordbreakimp img {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+div.kmcontent {
+	/* border: 2px solid #888; */
+	background-color: light-dark(#f5f5f5, #1e1e1e);
+	border-radius: 5px;
+	padding: 10px;
+	margin-top: 10px;
+	margin-bottom: 10px;
+}
 div.urllink {
 	padding: 5px;
 	margin-top: 5px;
@@ -1699,7 +1725,8 @@ div.divsearchfield {
 }
 .divadvancedsearchfieldcompinput {
 	background: #fff;
-	border-bottom: solid 1px var(--inputbordercolor);
+	border: solid 1px var(--inputbordercolor);
+	border-radius: 5px;
 }
 
 .search_component_params {
@@ -4333,7 +4360,7 @@ a.tab:link, a.tab:visited, a.tab:hover, a.tab#active {
 
 	border-right: 1px solid #AAA !important;
 	border-left: 1px solid #AAA !important;
-	border-top: 2px solid #111 !important;
+	border-top: 2px solid #AAA !important;
 }
 .tabunactive, a.tab#unactive {
 	border-right: 1px solid transparent;
@@ -4347,8 +4374,8 @@ a.tab:hover
 	/*
 	background: var(--colorbacktabcard1) url(<?php echo dol_buildpath($path.'/theme/'.$theme.'/img/nav-overlay3.png', 1); ?>) 50% 0 repeat-x;
 	color: var(--colortextbacktab);
-	*/
 	text-decoration: underline;
+	*/
 }
 a.tabimage {
 	color: #434956;
@@ -4698,6 +4725,27 @@ table.paddingtopbottomonly tr td {
 	padding-top: 1px;
 	padding-bottom: 2px;
 }
+
+
+/* Block of CSS to fix border on firefox */
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre:first-of-type,
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre_filter:first-of-type {
+	background: unset !important;	/* note using background-color here does not work */
+}
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre:first-of-type th,
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre_filter:first-of-type th,
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre:first-of-type td,
+table.noborder:not(#tablelines):not(#tablelinesservice) tr.liste_titre_filter:first-of-type td {
+	background: var(--colorbacktitle1) !important;
+}
+table.noborder:not(#tablelines):not(#tablelinesservice) tr:last-of-type:not(:hover,.highlight) {
+	background: inherit;
+}
+table.noborder:not(#tablelines):not(#tablelinesservice) tr:last-of-type:not(:hover,.highlight) td {
+	background: -moz-linear-gradient(bottom, var(--colorbacklinepair1) 0%, var(--colorbacklinepair2) 100%);
+}
+
+
 /* CSS to remove the interline border */
 table.nointerlines tr:not(:last-child) td {
 	border-bottom: unset !important;
@@ -4708,6 +4756,7 @@ table.nointerlines tr:not(:last-child) td {
 <?php $borderradius = getDolGlobalString('THEME_ELDY_USEBORDERONTABLE') ? getDolGlobalInt('THEME_ELDY_BORDER_RADIUS', 6) : 0; ?>
 table.noborder:not(.cal_month, .paymenttable, .margintable) {
 	border-radius: <?php echo $borderradius; ?>px;
+	/* overflow: hidden; */ /* Firefox does not clip cell backgrounds to the table border-radius without this */
 }
 table.noborder.cal_month {
 	border-bottom-left-radius: <?php echo $borderradius; ?>px;
@@ -4749,6 +4798,7 @@ table.liste:not(.listwithfilterbefore) {
 table.liste {
 	border-bottom-left-radius: <?php echo $borderradius; ?>px;
 	border-bottom-right-radius: <?php echo $borderradius; ?>px;
+	/* overflow: hidden; */ /* Firefox does not clip cell backgrounds to the table border-radius without this */
 }
 table.liste:not(.listwithfilterbefore) tr.liste_titre_filter:first-child td:first-child,
 table.liste:not(.listwithfilterbefore) tr.liste_titre_filter:first-child th:first-child {
@@ -5226,9 +5276,14 @@ tr.liste_titre_topborder td {
 .liste_titre td a.notasortlink:hover {
 	background: transparent;
 }
-tr.liste_titre:last-child th.liste_titre, tr.liste_titre:last-child th.liste_titre_sel, tr.liste_titre td.liste_titre, tr.liste_titre td.liste_titre_sel, form.liste_titre div.tagtd {				/* For last line of table headers only */
+
+/* For last line of table headers only */
+table > tr.liste_titre:last-child th.liste_titre, table > tr.liste_titre:last-child th.liste_titre_sel, table > tr.liste_titre td.liste_titre, table > tr.liste_titre td.liste_titre_sel,
+table > tbody > tr.liste_titre:last-child th.liste_titre, table > tbody > tr.liste_titre:last-child th.liste_titre_sel, table > tbody > tr.liste_titre td.liste_titre, table > tbody > tr.liste_titre td.liste_titre_sel,
+form.liste_titre div.tagtd {
 	border-bottom: none;
 }
+
 tr.liste_titre_filter th.liste_titre:not(.center), tr.liste_titre_filter th.liste_titre_sel:not(.center) {
 	text-align: unset;
 }
@@ -5266,7 +5321,7 @@ tr.liste_sub_total, tr.liste_sub_total td {
 	border-bottom: 2px solid #aaa;
 }
 
-.tableforservicepart1 .impair, .tableforservicepart1 .pair, .tableforservicepart2 .impair, .tableforservicepart2 .pair {
+.tableforservicepart1 .impair, .tableforservicepart1 .pair, .tableforservicepart1 .oddeven, .tableforservicepart2 .impair, .tableforservicepart2 .pair, .tableforservicepart2 .oddeven {
 	background: #FFF;
 }
 .tableforservicepart1 tbody tr td, .tableforservicepart2 tbody tr td {
@@ -5633,6 +5688,90 @@ img.boxhandle, img.boxclose {
 .add-filter-btn {
 	margin: 0 !important;
 }
+/* Component fieldcombo: 2 levels combo to select first the element (the table) then the field */
+.fieldcombo {
+	position: relative;
+	display: inline-block;
+	vertical-align: middle;
+}
+.fieldcombo-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 250px;
+	padding: 4px 8px;
+	background: #fff;
+	border: 1px solid var(--inputbordercolor);
+	border-radius: 3px;
+	text-align: left;
+	cursor: pointer;
+	height: 28px;
+}
+.fieldcombo-label {
+	flex: 1 1 auto;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.fieldcombo-panel {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	width: 450px;
+	margin-top: 2px;
+	background: var(--colorbackbody);
+	border: 1px solid var(--inputbordercolor);
+	border-radius: 3px;
+	box-shadow: rgba(136, 136, 136, 0.267) 1px 2px 10px;
+	z-index: 1001;
+}
+.fieldcombo-search {
+	width: 95%;
+	margin: 0;
+	padding: 4px 8px;
+	border: 0;
+	border-bottom: 1px solid var(--inputbordercolor);
+}
+.fieldcombo-list {
+	max-height: 300px;
+	overflow-y: auto;
+	padding-bottom: 10px
+}
+.fieldcombo-elementheader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 8px;
+	cursor: pointer;
+	font-weight: bold;
+}
+.fieldcombo-elementheader:hover, .fieldcombo-elementheader:focus {
+	background: var(--colorbacklinepairhover);
+}
+.fieldcombo-elementcaret {
+	flex: 0 0 auto;
+}
+.fieldcombo-element.open .fieldcombo-elementcaret {
+	transform: rotate(90deg);
+}
+.fieldcombo-children {
+	/* Hidden by default with an inline style, shown dynamically by JS after a search or a click on the element */
+	padding-left: 26px;
+}
+.fieldcombo-fields {
+	/* Hidden by default with an inline style, shown dynamically by JS after a search or a click on the element */
+	padding-left: 26px;
+}
+.fieldcombo-field {
+	padding: 4px 8px;
+	cursor: pointer;
+}
+.fieldcombo-field:hover, .fieldcombo-field:focus {
+	background: var(--colorbacklinepairhover);
+}
+.fieldcombo-field.selected {
+	font-weight: bold;
+}
 .search-component-assistance .operand, .search-component-assistance .operator, .search-component-assistance .value {
 	display: inline-block;
 }
@@ -5767,7 +5906,7 @@ div.boximport {
 .product_line_stock_ok { color: #002200; }
 .product_line_stock_too_low { color: #884400; }
 
-.fieldrequired { font-weight: bold; color: #000055; }
+.fieldrequired { font-weight: bold; }
 #tablesubscribe .fieldrequired {
 	font-weight: inherit !important;
 	color: inherit !important;
@@ -5845,15 +5984,12 @@ table.table-fiche-title tr.toptitle {
 div.titre {
 	font-size: 14px;
 	text-decoration: none;
-	/*padding-top: 5px;
-	padding-bottom: 5px;*/
 	text-transform: uppercase;
-	/* text-shadow: 1px 1px 2px #FFFFFF; */
 }
 div.titre.small {
 	font-size: 1em;
 }
-div.titre {
+div.titre, tr.liste_titre .print-barre-liste {
 	color: var(--colortexttitlenotab);
 }
 
@@ -5903,6 +6039,10 @@ div.backgreypublicpayment {
 	color: #222;
 	opacity: 0.3;
 }
+a.poweredbyhref {
+	text-decoration: none;
+}
+
 span.buttonpaymentsmall {
 	text-shadow: none;
 }
@@ -5922,7 +6062,7 @@ span.buttonpaymentsmall {
 	width: 100%;
 	padding: 20px;
 	margin-bottom: 20px;
-	border-radius: 4px;
+	border-radius: 10px;
 }
 #tablepublicpayment .CTableRow1  { background-color: #F0F0F0 !important; }
 #tablepublicpayment tr.liste_total { border-bottom: 1px solid #CCCCCC !important; }
@@ -6011,6 +6151,14 @@ button.ui-button-icon-only.ui-dialog-titlebar-close {
 	border: 1px solid #e0e0e0;
 	border-radius: 6px;
 }
+.ui-dialog {
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	min-width: 300px;
+	max-width: 70%;
+}
 
 div#dialogforpopup {
 	background-color: #f8f8f8 !important;
@@ -6048,7 +6196,7 @@ button.ui-button-icon-only.ui-dialog-titlebar-close {
 /* Formulaire confirmation (When HTML is used)                                    */
 /* ============================================================================== */
 
-table.valid {
+table.valid, div.valid {
 	/* border-top: solid 1px #E6E6E6; */
 	border-<?php print $left; ?>: solid 5px #f2cf87;
 	/* border-<?php print $right; ?>: solid 1px #444444;
@@ -6244,6 +6392,10 @@ table.dp {
 	color: #000 !important;
 }
 
+.cke_source {
+	margin: 5px !important;
+}
+
 
 /* ============================================================================== */
 /*  Show/Hide                                                                     */
@@ -6417,11 +6569,11 @@ table.cal_month.cal_peruser td { padding-left: 0 !important; padding-right: 0 !i
 .cal_current_month { border-top: 0; border-left: solid 1px #E0E0E0; border-right: 0; border-bottom: solid 1px #E0E0E0; }
 .cal_current_month_peruserleft { border-top: 0; border-left: solid 2px #6C7C7B; border-right: 0; border-bottom: solid 1px #E0E0E0; }
 .cal_current_month_oneday { border-right: solid 1px #E0E0E0; }
-.cal_other_month   { border-top: 0; border-left: solid 1px #C0C0C0; border-right: 0; border-bottom: solid 1px #C0C0C0; }
+.cal_other_month   { border-top: 0; border-left: solid 1px #E0E0E0; border-right: 0; border-bottom: solid 1px #C0C0C0; }
 .cal_other_month_peruserleft { border-top: 0; border-left: solid 2px #6C7C7B !important; border-right: 0; }
 .cal_current_month_right { border-right: solid 1px #E0E0E0; }
 .cal_other_month_right   { border-right: solid 1px #C0C0C0; }
-.cal_other_month   { /* opacity: 0.6; */ background: #FAFAFA; padding-<?php print $left; ?>: 2px; padding-<?php print $right; ?>: 1px; padding-top: 0px; padding-bottom: 0px; }
+.cal_other_month   { /* opacity: 0.6; */ background: #FCFCFC; padding-<?php print $left; ?>: 2px; padding-<?php print $right; ?>: 1px; padding-top: 0px; padding-bottom: 0px; }
 .cal_past_month    { /* opacity: 0.6; */ background: #EEEEEE; padding-<?php print $left; ?>: 2px; padding-<?php print $right; ?>: 1px; padding-top: 0px; padding-bottom: 0px; }
 .cal_current_month { background: #FFFFFF; border-left: solid 1px #E0E0E0; padding-<?php print $left; ?>: 2px; padding-<?php print $right; ?>: 1px; padding-top: 0px; padding-bottom: 0px; }
 .cal_current_month_peruserleft { background: #FFFFFF; border-left: solid 2px #6C7C7B; padding-<?php print $left; ?>: 2px; padding-<?php print $right; ?>: 1px; padding-top: 0px; padding-bottom: 0px; }
@@ -6433,6 +6585,7 @@ table.cal_month.cal_peruser td { padding-left: 0 !important; padding-right: 0 !i
 .cal_peruser         { padding: 0px; height: 22px !important; }
 .cal_peruserviewname { max-width: 140px; height: 22px !important; }
 .cal_impair        { background: #FBFBFB; }
+.cal_showmore      { opacity: 0.5 }
 .peruser_busy      { background: #CC8888; }
 .peruser_notbusy   { background: #EEDDDD; opacity: 0.5; }
 div.event { margin-top: 4px; margin-bottom: 4px; margin-left: 2px; margin-right: 2px; border-radius: 4px; box-shadow: 2px 2px 5px rgba(100, 100, 100, 0.2); }
@@ -6462,7 +6615,7 @@ td.small.cal_event {
 }
 
 td.cal_other_month {
-	opacity: 0.7;
+	/* opacity: 0.7; */
 }
 td.event-past span  {
 	opacity: 0.5;
@@ -6885,6 +7038,9 @@ div.cke_notifications_area .cke_notification_warning {
 /*  TinyMCE                                                                       */
 /* ============================================================================== */
 
+td.linecoldescription .tox.tox-tinymce {
+	margin-top: 8px;
+}
 .tox .tox-edit-area::before {
 	border: none !important;
 }
@@ -7777,12 +7933,12 @@ select.multiselectononeline {
 @media only screen and (min-width: 767px)
 {
 	/* CSS to have the dropdown boxes larger that the input search area */
-	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem):not(.yesno) .select2-dropdown.ui-dialog {
+	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem, .combolargelist):not(.yesno) .select2-dropdown.ui-dialog {
 		min-width: 300px !important;
 		padding: 8px;
 	}
-	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem):not(.yesno) .select2-dropdown--below:not(.onrightofpage),
-	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem):not(.yesno) .select2-dropdown--above:not(.onrightofpage) {
+	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem, .combolargelist):not(.yesno) .select2-dropdown--below:not(.onrightofpage),
+	.select2-container.select2-container--open:not(.graphtype, .limit, .combolargeelem, .combolargelist):not(.yesno) .select2-dropdown--above:not(.onrightofpage) {
 		min-width: 300px !important;
 		padding: 8px;
 	}
@@ -7792,6 +7948,14 @@ select.multiselectononeline {
 	}
 	.combolargeelem.select2-container.select2-container--open .select2-dropdown.ui-dialog {
 		min-width: 320px !important;
+	}
+	/* CSS to have the dropdown list of the combo larger than the visible component when closed (min-width 450px) */
+	.combolargelist.select2-container.select2-container--open .select2-dropdown.ui-dialog {
+		min-width: 450px !important;
+	}
+	.combolargelist.select2-container.select2-container--open .select2-dropdown--below,
+	.combolargelist.select2-container.select2-container--open .select2-dropdown--above {
+		min-width: 450px !important;
 	}
 
 	.select2-container--open .select2-dropdown--below {
@@ -7807,6 +7971,15 @@ select.multiselectononeline {
 
 .parentonrightofpage {
   direction: rtl;
+}
+/* Fix the rendering of the list of options when the dropdown of a select2 combo is rendered into the pagination bar
+   (a select into a parent with class parentonrightofpage): cancel the rules div.pagination ul and div.pagination li */
+div.pagination ul.select2-results__options {
+	display: block;
+}
+div.pagination li.select2-results__option {
+	display: block;
+	padding: 6px;	/* Must repeat the padding of select2 default because the rule div.pagination li sets it to 0 */
 }
 
 
@@ -7990,7 +8163,7 @@ dl.dropdown {
 .dropdown dd ul.selectedfieldsleft {
 	<?php echo $right; ?>: auto;
 }
-.dropdown dd ul li {
+.dropdown dd ul li, div.liinputsearch {
 	white-space: nowrap;
 	font-weight: normal;
 	padding: 7px 8px 7px 8px;
@@ -8966,6 +9139,16 @@ table.jPicker {
 	padding-top: 6px;
 	border-radius: <?php echo $borderradius; ?>px;
 }
+/* Module AI - configure_tools.php: chevron rotation animation on collapse/expand */
+.toggle-icon {
+	display: inline-block;
+	margin-right: 8px;
+	transition: transform 0.2s ease-in-out;
+}
+
+.trgroup.collapsed .toggle-icon {
+	transform: rotate(-90deg);
+}
 
 
 /* ============================================================================== */
@@ -9346,6 +9529,7 @@ if (is_object($db)) {
 	user-select: none; /* Non-prefixed version, currently
 			  supported by Chrome, Edge, Opera and Firefox */
 }
+
 
 /* Must be at end */
 div.flot-text .flot-tick-label .tickLabel, .fa-color-unset {
