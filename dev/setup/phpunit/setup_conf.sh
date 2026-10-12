@@ -50,8 +50,7 @@ function save_db_cache() (
 	target_version=${target_version:=23.0.0}
 
 	# Sequence of versions for upgrade process (to be completed)
-	VERSIONS=("3.5.0" "3.6.0" "3.7.0" "3.8.0" "3.9.0")
-	VERSIONS+=("4.0.0")
+	VERSIONS=("4.0.0")
 	# Next versions are automatic
 
 	# Append versions up to the current dolibarr version
@@ -199,7 +198,7 @@ if [ "$DB" = 'mysql' ] || [ "$DB" = 'mariadb' ] || [ "$DB" = 'postgresql' ]; the
 		eval ${SUDO} "${MYSQL}" --force ${USERPASS_OPT} -h 127.0.0.1 -D travis < ${DB_CACHE_FILE} | tee $TRAVIS_BUILD_DIR/db_from_cacheinit.log
 	else
 		echo "MySQL load initial sql"
-		sed 's/\([ `]\)llx_/\1'"${DB_PREFIX}/g" < "${TRAVIS_BUILD_DIR}/dev/initdemo/mysqldump_dolibarr_3.5.0.sql" | eval ${SUDO} "${MYSQL}" --force ${USERPASS_OPT} -h 127.0.0.1 -D travis | tee $TRAVIS_BUILD_DIR/initial_350.log
+		sed 's/\([ `]\)llx_/\1'"${DB_PREFIX}/g" < "${TRAVIS_BUILD_DIR}/dev/initdemo/mysqldump_dolibarr_4.0.0.sql" | eval ${SUDO} "${MYSQL}" --force ${USERPASS_OPT} -h 127.0.0.1 -D travis | tee $TRAVIS_BUILD_DIR/initial_400.log
 	fi
 elif [ "$DB" = 'postgresql' ]; then
 	echo Install pgsql if run is for pgsql
