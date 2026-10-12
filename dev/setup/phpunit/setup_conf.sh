@@ -283,7 +283,7 @@ if [ "$load_cache" != "1" ] ; then
 		"${PHP}" $PHP_OPT -r "$PHP_REPAIR_OPT; include 'repair.php';" > ${LOGNAME}.log
 
 		{
-			"${PHP}" $PHP_OPT upgrade2.php 0.0.0 0.0.0 MAIN_MODULE_API,MAIN_MODULE_ProductBatch,MAIN_MODULE_SupplierProposal,MAIN_MODULE_STRIPE,MAIN_MODULE_ExpenseReport
+			"${PHP}" $PHP_OPT upgrade2.php 0.0.0 0.0.0 MAIN_MODULE_API,MAIN_MODULE_ProductBatch,MAIN_MODULE_SupplierProposal,MAIN_MODULE_STRIPE,MAIN_MODULE_ExpenseReport,MAIN_MODULE_ADHERENT
 			"${PHP}" $PHP_OPT upgrade2.php 0.0.0 0.0.0 MAIN_MODULE_WEBSITE,MAIN_MODULE_TICKET,MAIN_MODULE_ACCOUNTING,MAIN_MODULE_MRP
 			"${PHP}" $PHP_OPT upgrade2.php 0.0.0 0.0.0 MAIN_MODULE_RECEPTION,MAIN_MODULE_RECRUITMENT
 			"${PHP}" $PHP_OPT upgrade2.php 0.0.0 0.0.0 MAIN_MODULE_KnowledgeManagement,MAIN_MODULE_EventOrganization,MAIN_MODULE_PARTNERSHIP
